@@ -25,14 +25,20 @@
  */
 #include <tesseract_common/macros.h>
 TESSERACT_COMMON_IGNORE_WARNINGS_PUSH
-#include <kdl/segment.hpp>
+#include <console_bridge/console.h>
+#include <tesseract_scene_graph/graph.h>
 #include <tesseract_scene_graph/kdl_parser.h>
 #include <memory>
 TESSERACT_COMMON_IGNORE_WARNINGS_POP
 
 #include <tesseract_kinematics/kdl/kdl_inv_kin_chain_nr_jl.h>
-#include <tesseract_kinematics/kdl/kdl_utils.h>
-#include <tesseract_kinematics/core/utils.h>
+
+#include <limits>
+#include <chrono>
+#include <iostream>
+
+using Clock = std::chrono::steady_clock;
+using namespace KDL;
 
 namespace tesseract_kinematics
 {
@@ -41,8 +47,9 @@ using Eigen::VectorXd;
 
 KDLInvKinChainNR_JL::KDLInvKinChainNR_JL(const tesseract_scene_graph::SceneGraph& scene_graph,
                                          const std::vector<std::pair<std::string, std::string>>& chains,
+                                         Config kdl_config,
                                          std::string solver_name)
-  : solver_name_(std::move(solver_name))
+  : kdl_config_(kdl_config), solver_name_(std::move(solver_name))
 {
   if (!scene_graph.getLink(scene_graph.getRoot()))
     throw std::runtime_error("The scene graph has an invalid root.");
@@ -52,16 +59,40 @@ KDLInvKinChainNR_JL::KDLInvKinChainNR_JL(const tesseract_scene_graph::SceneGraph
 
   // Create KDL FK and IK Solver
   fk_solver_ = std::make_unique<KDL::ChainFkSolverPos_recursive>(kdl_data_.robot_chain);
-  ik_vel_solver_ = std::make_unique<KDL::ChainIkSolverVel_pinv>(kdl_data_.robot_chain);
-  ik_solver_ = std::make_unique<KDL::ChainIkSolverPos_NR_JL>(
-      kdl_data_.robot_chain, kdl_data_.q_min, kdl_data_.q_max, *fk_solver_, *ik_vel_solver_);
+  ik_vel_solver_ = std::make_unique<KDL::ChainIkSolverVel_pinv>(
+      kdl_data_.robot_chain, kdl_config_.vel_eps, kdl_config_.vel_iterations);
+  ik_solver_ = std::make_unique<KDL::ChainIkSolverPos_NR_JL>(kdl_data_.robot_chain,
+                                                             kdl_data_.q_min,
+                                                             kdl_data_.q_max,
+                                                             *fk_solver_,
+                                                             *ik_vel_solver_,
+                                                             kdl_config_.pos_iterations,
+                                                             kdl_config_.pos_eps);
+
+  // parse types
+  auto chain = kdl_data_.robot_chain;
+  for (uint i = 0; i < chain.segments.size(); i++)
+  {
+    std::string type = chain.segments[i].getJoint().getTypeName();
+    if (type.find("Rot") != std::string::npos)
+    {
+      if (kdl_data_.q_max(static_cast<unsigned int>(types.size())) >= std::numeric_limits<float>::max() &&
+          kdl_data_.q_min(static_cast<unsigned int>(types.size())) <= std::numeric_limits<float>::lowest())
+        types.push_back(tesseract_kinematics::BasicJointType::Continuous);
+      else types.push_back(tesseract_kinematics::BasicJointType::RotJoint);
+    }
+    else if (type.find("Trans") != std::string::npos) {
+      types.push_back(tesseract_kinematics::BasicJointType::TransJoint);
+    }
+  }
 }
 
 KDLInvKinChainNR_JL::KDLInvKinChainNR_JL(const tesseract_scene_graph::SceneGraph& scene_graph,
                                          const std::string& base_link,
                                          const std::string& tip_link,
+                                         Config kdl_config,
                                          std::string solver_name)
-  : KDLInvKinChainNR_JL(scene_graph, { std::make_pair(base_link, tip_link) }, std::move(solver_name))
+  : KDLInvKinChainNR_JL(scene_graph, { std::make_pair(base_link, tip_link) }, kdl_config, std::move(solver_name))
 {
 }
 
@@ -72,11 +103,19 @@ KDLInvKinChainNR_JL::KDLInvKinChainNR_JL(const KDLInvKinChainNR_JL& other) { *th
 KDLInvKinChainNR_JL& KDLInvKinChainNR_JL::operator=(const KDLInvKinChainNR_JL& other)
 {
   kdl_data_ = other.kdl_data_;
+  kdl_config_ = other.kdl_config_;
   fk_solver_ = std::make_unique<KDL::ChainFkSolverPos_recursive>(kdl_data_.robot_chain);
-  ik_vel_solver_ = std::make_unique<KDL::ChainIkSolverVel_pinv>(kdl_data_.robot_chain);
-  ik_solver_ = std::make_unique<KDL::ChainIkSolverPos_NR_JL>(
-      kdl_data_.robot_chain, kdl_data_.q_min, kdl_data_.q_max, *fk_solver_, *ik_vel_solver_);
+  ik_vel_solver_ = std::make_unique<KDL::ChainIkSolverVel_pinv>(
+      kdl_data_.robot_chain, kdl_config_.vel_eps, kdl_config_.vel_iterations);
+  ik_solver_ = std::make_unique<KDL::ChainIkSolverPos_NR_JL>(kdl_data_.robot_chain,
+                                                             kdl_data_.q_min,
+                                                             kdl_data_.q_max,
+                                                             *fk_solver_,
+                                                             *ik_vel_solver_,
+                                                             kdl_config_.pos_iterations,
+                                                             kdl_config_.pos_eps);
   solver_name_ = other.solver_name_;
+  types = other.types;
 
   return *this;
 }
@@ -86,58 +125,143 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
                                                   int /*segment_num*/) const
 {
   assert(std::abs(1.0 - pose.matrix().determinant()) < 1e-6);  // NOLINT
-  KDL::JntArray kdl_seed, kdl_solution;
-  EigenToKDL(seed, kdl_seed);
-  kdl_solution.resize(static_cast<unsigned>(seed.size()));
+
+  // print more info
+  
+  int run_cnt = 0;
+  unsigned int n = kdl_data_.robot_chain.getNrOfJoints();
+  auto start_time = Clock::now();
+  double time_left;
+  KDL::Frame f;
+  KDL::Twist delta_twist;
+  KDL::JntArray delta_q(n);
+  // init seed
+  KDL::Frame p_in;
+  EigenToKDL(pose, p_in);
+  KDL::JntArray q_out;
+  EigenToKDL(seed, q_out);
+  
+  std::cout << "q_out" << std::endl;
+  printJntArray(q_out);
+
+  std::cout << "p_in" << std::endl;
+  printFrame(p_in);
+
+  // final solution to return
+  std::cout << "seed size: " << seed.size() << "  joint size: " << n << std::endl;
   Eigen::VectorXd solution(seed.size());
-
-  // run IK solver
-  // TODO: Need to update to handle seg number. Need to create an IK solver for each seg.
-  KDL::Frame kdl_pose;
-  EigenToKDL(pose, kdl_pose);
-  int status{ -1 };
+  auto q_min =  kdl_data_.q_min;
+  auto q_max =  kdl_data_.q_max;
+  do
   {
-    std::lock_guard<std::mutex> guard(mutex_);
-    status = ik_solver_->CartToJnt(kdl_seed, kdl_pose, kdl_solution);
+    fk_solver_ -> JntToCart(q_out, f);
+    delta_twist = diffRelative(p_in, f);
+    run_cnt = run_cnt + 1;
+    if (std::abs(delta_twist.vel.x()) <= std::abs(bounds.vel.x()))
+      delta_twist.vel.x(0);
+
+    if (std::abs(delta_twist.vel.y()) <= std::abs(bounds.vel.y()))
+      delta_twist.vel.y(0);
+
+    if (std::abs(delta_twist.vel.z()) <= std::abs(bounds.vel.z()))
+      delta_twist.vel.z(0);
+
+    if (std::abs(delta_twist.rot.x()) <= std::abs(bounds.rot.x()))
+      delta_twist.rot.x(0);
+
+    if (std::abs(delta_twist.rot.y()) <= std::abs(bounds.rot.y()))
+      delta_twist.rot.y(0);
+
+    if (std::abs(delta_twist.rot.z()) <= std::abs(bounds.rot.z()))
+      delta_twist.rot.z(0);
+
+    if (Equal(delta_twist, KDL::Twist::Zero(), eps)) {
+      std::cout << "found a solution run_cnt: " << run_cnt << std::endl;
+      printJntArray(q_out);
+      std::cout << "calcInvKinHelper pose: \n" << pose.matrix() << std::endl;
+      KDLToEigen(q_out, solution);
+      return { solution };
+    }
+
+    delta_twist = diff(f, p_in);
+    std::cout << "delta_twist: " << run_cnt << " \n" << std::endl;
+    printTwist(delta_twist);
+    ik_vel_solver_ -> CartToJnt(q_out, delta_twist, delta_q);
+    KDL::JntArray q_curr(n);
+
+    KDL::Add(q_out, delta_q, q_curr);
+
+    for (unsigned int j = 0; j < q_min.data.size(); j++)
+    {
+      if (types[j] == tesseract_kinematics::BasicJointType::Continuous)
+        continue;
+      if (q_curr(j) < q_min(j))
+      {
+        if (!wrap || types[j] == tesseract_kinematics::BasicJointType::TransJoint)
+          // KDL's default
+          q_curr(j) = q_min(j);
+        else
+        {
+          // Find actual wrapped angle between limit and joint
+          double diffangle = fmod(q_min(j) - q_curr(j), 2 * M_PI);
+          // Subtract that angle from limit and go into the range by a
+          // revolution
+          double curr_angle = q_min(j) - diffangle + 2 * M_PI;
+          if (curr_angle > q_max(j))
+            q_curr(j) = q_min(j);
+          else
+            q_curr(j) = curr_angle;
+        }
+      }
+    }
+
+    for (unsigned int j = 0; j < q_max.data.size(); j++)
+    {
+      if (types[j] == tesseract_kinematics::BasicJointType::Continuous)
+        continue;
+
+      if (q_curr(j) > q_max(j))
+      {
+        if (!wrap || types[j] == tesseract_kinematics::BasicJointType::TransJoint)
+          // KDL's default
+          q_curr(j) = q_max(j);
+        else
+        {
+          // Find actual wrapped angle between limit and joint
+          double diffangle = fmod(q_curr(j) - q_max(j), 2 * M_PI);
+          // Add that angle to limit and go into the range by a revolution
+          double curr_angle = q_max(j) + diffangle - 2 * M_PI;
+          if (curr_angle < q_min(j))
+            q_curr(j) = q_max(j);
+          else
+            q_curr(j) = curr_angle;
+        }
+      }
+    }
+
+    KDL::Subtract(q_out, q_curr, q_out);
+
+    if (q_out.data.isZero(std::numeric_limits<float>::epsilon()))
+    {
+      if (rr)
+      {
+        for (unsigned int j = 0; j < q_out.data.size(); j++)
+          if (types[j] == tesseract_kinematics::BasicJointType::Continuous)
+            q_curr(j) = fRand(q_curr(j) - 2 * M_PI, q_curr(j) + 2 * M_PI);
+          else
+            q_curr(j) = fRand(q_min(j), q_max(j));
+      }
+    }
+
+    q_out = q_curr;
+
+    auto timediff = Clock::now() - start_time;
+    time_left = maxtime - std::chrono::duration<double>(timediff).count();
+    std::cout << "time_left: " << time_left << std::endl;
   }
-
-  if (status < 0)
-  {
-    // LCOV_EXCL_START
-    if (status == KDL::ChainIkSolverPos_NR_JL::E_DEGRADED)
-    {
-      CONSOLE_BRIDGE_logDebug("KDL NR Failed to calculate IK, solution converged to <eps in maxiter, but solution is "
-                              "degraded in quality (e.g. pseudo-inverse in iksolver is singular)");
-    }
-    else if (status == KDL::ChainIkSolverPos_NR_JL::E_IKSOLVERVEL_FAILED)
-    {
-      CONSOLE_BRIDGE_logDebug("KDL NR Failed to calculate IK, velocity IK solver failed");
-    }
-    else if (status == KDL::ChainIkSolverPos_NR_JL::E_FKSOLVERPOS_FAILED)
-    {
-      CONSOLE_BRIDGE_logDebug("KDL NR Failed to calculate IK, position FK solver failed");
-    }
-    else if (status == KDL::ChainIkSolverPos_NR_JL::E_NO_CONVERGE)
-    {
-      CONSOLE_BRIDGE_logDebug("KDL NR Failed to calculate IK, no solution found");
-    }
-#ifndef KDL_LESS_1_4_0
-    else if (status == KDL::ChainIkSolverPos_NR_JL::E_MAX_ITERATIONS_EXCEEDED)
-    {
-      CONSOLE_BRIDGE_logDebug("KDL NR Failed to calculate IK, max iteration exceeded");
-    }
-#endif
-    else
-    {
-      CONSOLE_BRIDGE_logDebug("KDL NR Failed to calculate IK");
-    }
-    // LCOV_EXCL_STOP
-    return {};
-  }
-
-  KDLToEigen(kdl_solution, solution);
-
-  return { solution };
+  while (time_left > 0);
+  std::cout << "not found a solution run_cnt: " << run_cnt << std::endl;
+  return {};
 }
 
 IKSolutions KDLInvKinChainNR_JL::calcInvKin(const tesseract_common::TransformMap& tip_link_poses,
