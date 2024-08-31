@@ -141,14 +141,14 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
   KDL::JntArray q_out;
   EigenToKDL(seed, q_out);
   
-  std::cout << "q_out" << std::endl;
+  // std::cout << "q_out" << std::endl;
   printJntArray(q_out);
 
-  std::cout << "p_in" << std::endl;
+  // std::cout << "p_in" << std::endl;
   printFrame(p_in);
 
   // final solution to return
-  std::cout << "seed size: " << seed.size() << "  joint size: " << n << std::endl;
+  // std::cout << "seed size: " << seed.size() << "  joint size: " << n << std::endl;
   Eigen::VectorXd solution(seed.size());
   auto q_min =  kdl_data_.q_min;
   auto q_max =  kdl_data_.q_max;
@@ -184,8 +184,8 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
     }
 
     delta_twist = diff(f, p_in);
-    std::cout << "delta_twist: " << run_cnt << " \n" << std::endl;
-    printTwist(delta_twist);
+    // std::cout << "delta_twist: " << run_cnt << " \n" << std::endl;
+    // printTwist(delta_twist);
     ik_vel_solver_ -> CartToJnt(q_out, delta_twist, delta_q);
     KDL::JntArray q_curr(n);
 
@@ -257,7 +257,7 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
 
     auto timediff = Clock::now() - start_time;
     time_left = maxtime - std::chrono::duration<double>(timediff).count();
-    std::cout << "time_left: " << time_left << std::endl;
+    // std::cout << "time_left: " << time_left << std::endl;
   }
   while (time_left > 0);
   std::cout << "not found a solution run_cnt: " << run_cnt << std::endl;

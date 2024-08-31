@@ -130,6 +130,7 @@ InverseKinematics::UPtr KDLInvKinChainNR_JLFactory::create(const std::string& so
 {
   std::string base_link;
   std::string tip_link;
+  KDLInvKinChainNR_JL::Config kdl_config;
 
   try
   {
@@ -142,6 +143,18 @@ InverseKinematics::UPtr KDLInvKinChainNR_JLFactory::create(const std::string& so
       tip_link = n.as<std::string>();
     else
       throw std::runtime_error("KDLInvKinChainNR_JLFactory, missing 'tip_link' entry");
+    // Optional configuration parameters
+    if (YAML::Node n = config["velocity_eps"])
+      kdl_config.vel_eps = n.as<double>();
+
+    if (YAML::Node n = config["velocity_iterations"])
+      kdl_config.vel_iterations = n.as<int>();
+
+    if (YAML::Node n = config["position_eps"])
+      kdl_config.pos_eps = n.as<double>();
+
+    if (YAML::Node n = config["position_iterations"])
+      kdl_config.pos_iterations = n.as<int>();
   }
   catch (const std::exception& e)
   {
@@ -149,7 +162,7 @@ InverseKinematics::UPtr KDLInvKinChainNR_JLFactory::create(const std::string& so
     return nullptr;
   }
 
-  return std::make_unique<KDLInvKinChainNR_JL>(scene_graph, base_link, tip_link, solver_name);
+  return std::make_unique<KDLInvKinChainNR_JL>(scene_graph, base_link, tip_link, kdl_config, solver_name);
 }
 
 TESSERACT_PLUGIN_ANCHOR_IMPL(KDLFactoriesAnchor)

@@ -1076,6 +1076,87 @@ inline void runInvKinIIWATest(const tesseract_kinematics::KinematicsPluginFactor
     EXPECT_TRUE(inv_kin == nullptr);
   }
 }
+inline tesseract_scene_graph::SceneGraph::UPtr getSceneGraphAuboI5()
+{
+  std::cout << "TESSERACT_SUPPORT_DIR: " << TESSERACT_SUPPORT_DIR << std::endl;
+  std::string path = std::string(TESSERACT_SUPPORT_DIR) + "/urdf/i5.urdf";
+  tesseract_common::TesseractSupportResourceLocator locator;
+  return tesseract_urdf::parseURDFFile(path, locator);
+}
+inline void runInvKinAuboTest(const tesseract_kinematics::KinematicsPluginFactory& factory,
+                              const std::string& inv_factory_name,
+                              const std::string& fwd_factory_name)
+{
+  tesseract_scene_graph::SceneGraph::Ptr scene_graph = getSceneGraphAuboI5();
+  std::string manip_name = "manipulator";
+  std::string base_link_name = "base_link";
+  std::string tip_link_name = "wrist3_Link";
 
+  std::vector<std::string> joint_names;
+  joint_names.emplace_back("shoulder_joint");
+  joint_names.emplace_back("upperArm_joint");
+  joint_names.emplace_back("foreArm_joint");
+  joint_names.emplace_back("wrist1_joint");
+  joint_names.emplace_back("wrist2_joint");
+  joint_names.emplace_back("wrist3_joint");
+
+  std::vector<std::string> joint_link_names{ "shoulder_Link", "upperArm_Link", "foreArm_Link", "wrist1_Link", "wrist2_Link", "wrist3_Link"};
+  tesseract_common::KinematicLimits target_limits = getTargetLimits(*scene_graph, joint_names);
+
+  tesseract_scene_graph::KDLStateSolver state_solver(*scene_graph);
+  tesseract_scene_graph::SceneState scene_state = state_solver.getState();
+
+  tesseract_common::PluginInfo fwd_plugin_info;
+  fwd_plugin_info.class_name = fwd_factory_name;
+  fwd_plugin_info.config["base_link"] = base_link_name;
+  fwd_plugin_info.config["tip_link"] = tip_link_name;
+
+  tesseract_common::PluginInfo inv_plugin_info;
+  inv_plugin_info.class_name = inv_factory_name;
+  inv_plugin_info.config = fwd_plugin_info.config;
+
+  Eigen::Isometry3d pose = Eigen::Isometry3d::Identity() * Eigen::Translation3d(0.572, 0.0628, 0.3918) *  Eigen::Quaterniond(0.401943, -0.468533, 0.529425, 0.581917).normalized();
+  // Eigen::Isometry3d pose = Eigen::Isometry3d::Identity() * Eigen::Translation3d(0.2197798520666757, -0.48276520955573754, 0.5917324088607212) *  
+  // Eigen::Quaterniond(0.5105414233660913, 0.6905460317760038, -0.40175220247601473, 0.3179446505783847).normalized();
+  std::cout << "target post: " << pose.matrix() << std::endl; 
+  Eigen::VectorXd seed;
+  seed.resize(6);
+  seed(0) = 0;
+  seed(1) = 0;
+  seed(2) = 0;
+  seed(3) = 0;
+  seed(4) = 0;
+  seed(5) = 0;
+
+  {  // Check create method using base_link and tool0
+    auto fwd_kin = factory.createFwdKin(fwd_factory_name, fwd_plugin_info, *scene_graph, scene_state);
+    EXPECT_TRUE(fwd_kin != nullptr);
+   
+
+    auto inv_kin = factory.createInvKin(inv_factory_name, inv_plugin_info, *scene_graph, scene_state);
+    EXPECT_TRUE(inv_kin != nullptr);
+    //    EXPECT_EQ(inv_kin->getSolverName(), inv_solver_name);
+    EXPECT_EQ(inv_kin->numJoints(), 6);
+    EXPECT_EQ(inv_kin->getBaseLinkName(), base_link_name);
+    EXPECT_EQ(inv_kin->getWorkingFrame(), base_link_name);
+    EXPECT_EQ(inv_kin->getTipLinkNames().size(), 1);
+    EXPECT_EQ(inv_kin->getTipLinkNames()[0], tip_link_name);
+    EXPECT_EQ(inv_kin->getJointNames(), joint_names);
+
+    for(int i =0; i < 1000; i++) {
+      runInvKinTest(*inv_kin, *fwd_kin, pose, tip_link_name, seed);
+    }
+
+    // KinematicGroup kin_group(manip_name, joint_names, std::move(inv_kin), *scene_graph, scene_state);
+    // EXPECT_EQ(kin_group.getBaseLinkName(), scene_graph->getRoot());
+    // runInvKinTest(kin_group, pose, base_link_name, tip_link_name, seed);
+    // runKinGroupJacobianIIWATest(kin_group);
+    // runActiveLinkNamesIIWATest(kin_group);
+    // runKinJointLimitsTest(kin_group.getLimits(), target_limits);
+    // runKinSetJointLimitsTest(kin_group);
+    // EXPECT_EQ(kin_group.getRedundancyCapableJointIndices(), std::vector<Eigen::Index>({ 0, 1, 2, 3, 4, 5, 6 }));
+  }
+ 
+}
 }  // namespace tesseract_kinematics::test_suite
 #endif  // TESSERACT_KINEMATICS_KIN_TEST_SUITE_H
