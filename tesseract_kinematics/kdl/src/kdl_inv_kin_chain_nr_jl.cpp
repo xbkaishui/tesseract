@@ -126,8 +126,6 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
 {
   assert(std::abs(1.0 - pose.matrix().determinant()) < 1e-6);  // NOLINT
 
-  // print more info
-  
   int run_cnt = 0;
   unsigned int n = kdl_data_.robot_chain.getNrOfJoints();
   auto start_time = Clock::now();
@@ -135,60 +133,63 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
   KDL::Frame f;
   KDL::Twist delta_twist;
   KDL::JntArray delta_q(n);
-  // init seed
+
   KDL::Frame p_in;
   EigenToKDL(pose, p_in);
   KDL::JntArray q_out;
   EigenToKDL(seed, q_out);
-  
-  // std::cout << "q_out" << std::endl;
-  printJntArray(q_out);
 
-  // std::cout << "p_in" << std::endl;
-  printFrame(p_in);
+  // printJntArray(q_out);
+  // printFrame(p_in);
 
-  // final solution to return
-  // std::cout << "seed size: " << seed.size() << "  joint size: " << n << std::endl;
   Eigen::VectorXd solution(seed.size());
   auto q_min =  kdl_data_.q_min;
   auto q_max =  kdl_data_.q_max;
+
+  IKSolutions solutions;
+
+  // 定义一个用于检查解是否重复的lambda函数
+  auto isSolutionUnique = [&](const Eigen::VectorXd& sol) {
+    for (const auto& existing_sol : solutions)
+    {
+      if ((existing_sol - sol).norm() < 1e-6)  // 假设阈值为1e-6
+      {
+        return false;  // 发现重复
+      }
+    }
+    return true;  // 没有发现重复
+  };
+
   do
   {
-    fk_solver_ -> JntToCart(q_out, f);
+    fk_solver_->JntToCart(q_out, f);
     delta_twist = diffRelative(p_in, f);
     run_cnt = run_cnt + 1;
-    if (std::abs(delta_twist.vel.x()) <= std::abs(bounds.vel.x()))
-      delta_twist.vel.x(0);
 
-    if (std::abs(delta_twist.vel.y()) <= std::abs(bounds.vel.y()))
-      delta_twist.vel.y(0);
+    if (std::abs(delta_twist.vel.x()) <= std::abs(bounds.vel.x())) delta_twist.vel.x(0);
+    if (std::abs(delta_twist.vel.y()) <= std::abs(bounds.vel.y())) delta_twist.vel.y(0);
+    if (std::abs(delta_twist.vel.z()) <= std::abs(bounds.vel.z())) delta_twist.vel.z(0);
+    if (std::abs(delta_twist.rot.x()) <= std::abs(bounds.rot.x())) delta_twist.rot.x(0);
+    if (std::abs(delta_twist.rot.y()) <= std::abs(bounds.rot.y())) delta_twist.rot.y(0);
+    if (std::abs(delta_twist.rot.z()) <= std::abs(bounds.rot.z())) delta_twist.rot.z(0);
 
-    if (std::abs(delta_twist.vel.z()) <= std::abs(bounds.vel.z()))
-      delta_twist.vel.z(0);
-
-    if (std::abs(delta_twist.rot.x()) <= std::abs(bounds.rot.x()))
-      delta_twist.rot.x(0);
-
-    if (std::abs(delta_twist.rot.y()) <= std::abs(bounds.rot.y()))
-      delta_twist.rot.y(0);
-
-    if (std::abs(delta_twist.rot.z()) <= std::abs(bounds.rot.z()))
-      delta_twist.rot.z(0);
-
-    if (Equal(delta_twist, KDL::Twist::Zero(), eps)) {
-      std::cout << "found a solution run_cnt: " << run_cnt << std::endl;
-      printJntArray(q_out);
-      std::cout << "calcInvKinHelper pose: \n" << pose.matrix() << std::endl;
+    if (Equal(delta_twist, KDL::Twist::Zero(), eps))
+    {
+      // std::cout << "找到一个解，运行次数: " << run_cnt << std::endl;
+      // printJntArray(q_out);
+      // std::cout << "calcInvKinHelper pose: \n" << pose.matrix() << std::endl;
       KDLToEigen(q_out, solution);
-      return { solution };
+      
+      // 检查解是否唯一
+      if (isSolutionUnique(solution))
+      {
+        solutions.push_back(solution);  // 仅在解唯一时添加
+      }
     }
 
     delta_twist = diff(f, p_in);
-    // std::cout << "delta_twist: " << run_cnt << " \n" << std::endl;
-    // printTwist(delta_twist);
-    ik_vel_solver_ -> CartToJnt(q_out, delta_twist, delta_q);
+    ik_vel_solver_->CartToJnt(q_out, delta_twist, delta_q);
     KDL::JntArray q_curr(n);
-
     KDL::Add(q_out, delta_q, q_curr);
 
     for (unsigned int j = 0; j < q_min.data.size(); j++)
@@ -198,19 +199,12 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
       if (q_curr(j) < q_min(j))
       {
         if (!wrap || types[j] == tesseract_kinematics::BasicJointType::TransJoint)
-          // KDL's default
           q_curr(j) = q_min(j);
         else
         {
-          // Find actual wrapped angle between limit and joint
           double diffangle = fmod(q_min(j) - q_curr(j), 2 * M_PI);
-          // Subtract that angle from limit and go into the range by a
-          // revolution
           double curr_angle = q_min(j) - diffangle + 2 * M_PI;
-          if (curr_angle > q_max(j))
-            q_curr(j) = q_min(j);
-          else
-            q_curr(j) = curr_angle;
+          q_curr(j) = (curr_angle > q_max(j)) ? q_min(j) : curr_angle;
         }
       }
     }
@@ -223,18 +217,12 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
       if (q_curr(j) > q_max(j))
       {
         if (!wrap || types[j] == tesseract_kinematics::BasicJointType::TransJoint)
-          // KDL's default
           q_curr(j) = q_max(j);
         else
         {
-          // Find actual wrapped angle between limit and joint
           double diffangle = fmod(q_curr(j) - q_max(j), 2 * M_PI);
-          // Add that angle to limit and go into the range by a revolution
           double curr_angle = q_max(j) + diffangle - 2 * M_PI;
-          if (curr_angle < q_min(j))
-            q_curr(j) = q_max(j);
-          else
-            q_curr(j) = curr_angle;
+          q_curr(j) = (curr_angle < q_min(j)) ? q_max(j) : curr_angle;
         }
       }
     }
@@ -246,22 +234,26 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
       if (rr)
       {
         for (unsigned int j = 0; j < q_out.data.size(); j++)
+        {
           if (types[j] == tesseract_kinematics::BasicJointType::Continuous)
             q_curr(j) = fRand(q_curr(j) - 2 * M_PI, q_curr(j) + 2 * M_PI);
           else
             q_curr(j) = fRand(q_min(j), q_max(j));
+        }
       }
     }
 
     q_out = q_curr;
-
     auto timediff = Clock::now() - start_time;
     time_left = maxtime - std::chrono::duration<double>(timediff).count();
-    // std::cout << "time_left: " << time_left << std::endl;
-  }
-  while (time_left > 0);
-  std::cout << "not found a solution run_cnt: " << run_cnt << std::endl;
-  return {};
+  } while (time_left > 0);
+
+  printFrame(p_in);
+  // 在返回前打印找到的解的数量
+  std::cout << "Total number of solutions found: " << solutions.size() << std::endl;
+
+  std::cout << "Total number of runs: " << run_cnt << std::endl;
+  return solutions;  // 返回去重后的解
 }
 
 IKSolutions KDLInvKinChainNR_JL::calcInvKin(const tesseract_common::TransformMap& tip_link_poses,
