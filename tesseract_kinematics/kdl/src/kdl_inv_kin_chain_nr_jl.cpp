@@ -71,7 +71,7 @@ KDLInvKinChainNR_JL::KDLInvKinChainNR_JL(const tesseract_scene_graph::SceneGraph
 
   // parse types
   auto chain = kdl_data_.robot_chain;
-  for (uint i = 0; i < chain.segments.size(); i++)
+  for (unsigned int i = 0; i < chain.segments.size(); i++)
   {
     std::string type = chain.segments[i].getJoint().getTypeName();
     if (type.find("Rot") != std::string::npos)
