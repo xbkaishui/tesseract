@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - 'dev**'
+      - 'feat/kdl-rr'
   pull_request:
     paths:
       - 'tesseract**'
