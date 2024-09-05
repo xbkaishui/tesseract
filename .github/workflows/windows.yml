@@ -65,11 +65,12 @@ jobs:
         find $GITHUB_WORKSPACE -name "*kinematics*.dll" > dll_list.txt
         echo "Found DLL files:"
         cat dll_list.txt  # 打印找到的文件路径
-      continue-on-error: true
+        # 将所有路径转换成逗号分隔的格式，并保存到新变量
+        dll_files=$(paste -sd "," dll_list.txt)
+        echo "DLL files to be uploaded: $dll_files"
 
     - name: Upload found DLL files
       uses: actions/upload-artifact@v3
       with:
         name: kinematics-dlls  # Artifacts的名称
-        path: |
-          $(cat dll_list.txt)  # 上传找到的DLL文件
+        path: ${{ dll_files }}  # 上传找到的DLL文件
