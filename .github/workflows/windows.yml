@@ -5,7 +5,7 @@ on:
     branches:
       - master
       - 'dev**'
-      - 'feat/kdl-rr'
+      - feat/kdl-rr
   pull_request:
     paths:
       - 'tesseract**'
@@ -55,4 +55,25 @@ jobs:
         vcs-file: .github/workflows/windows_dependencies.repos
         upstream-args: --cmake-args -G "Ninja" -DVCPKG_TARGET_TRIPLET=x64-windows-release -DCMAKE_BUILD_TYPE=Release
         target-path: target_ws/src
-        target-args: --cmake-args -G "Ninja" -DVCPKG_TARGET_TRIPLET=x64-windows-release -DCMAKE_BUILD_TYPE=Release -DTESSERACT_ENABLE_TESTING=ON
+        target-args: --cmake-args -G "Ninja" -DVCPKG_TARGET_TRIPLET=x64-windows-release -DCMAKE_BUILD_TYPE=Release -DTESSERACT_ENABLE_TESTING=OFF
+    - name: Collect whl files
+      run: |
+        mkdir -p whl_files
+        # Assuming the whl files are in the target_ws/install/lib/python3/dist-packages/
+        cp target_ws/install/lib/python3/dist-packages/*.whl whl_files/
+
+    - name: Upload whl files
+      uses: actions/upload-artifact@v3
+      with:
+        name: whl-files
+        path: whl_files/
+
+    - name: Release
+      if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/feat/kdl-rr')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: whl_files/*
+        draft: false  # 将 draft 改为 false，使其直接发布
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
