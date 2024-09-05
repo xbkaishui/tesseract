@@ -57,9 +57,19 @@ jobs:
         target-path: target_ws/src
         target-args: --cmake-args -G "Ninja" -DVCPKG_TARGET_TRIPLET=x64-windows-release -DCMAKE_BUILD_TYPE=Release -DTESSERACT_ENABLE_TESTING=OFF
 
-    - name: 上传DLL文件作为构建产物
+    - name: Find DLLs containing 'kinematics' in the name
+      shell: bash
+      run: |
+        # 查找名字中包含'kinematics'的DLL文件并保存路径到文件
+        echo "Searching for DLL files containing 'kinematics' in the name..."
+        find $GITHUB_WORKSPACE -name "*kinematics*.dll" > dll_list.txt
+        echo "Found DLL files:"
+        cat dll_list.txt  # 打印找到的文件路径
+      continue-on-error: true
+
+    - name: Upload found DLL files
       uses: actions/upload-artifact@v3
       with:
-        name: compiled-dlls  # Artifacts名称
+        name: kinematics-dlls  # Artifacts的名称
         path: |
-          $GITHUB_WORKSPACE/target_ws/src/**/*.dll  # 上传所有编译好的DLL文件
+          $(cat dll_list.txt)  # 上传找到的DLL文件
