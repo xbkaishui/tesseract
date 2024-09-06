@@ -42,6 +42,14 @@ jobs:
       with:
         arch: x64
 
+    
+    - name: update environment
+      shell: bash
+      run: |
+        echo "PATH=${{ env.PATH }};$GITHUB_WORKSPACE\vcpkg\installed\x64-windows-release\bin" >> "$GITHUB_ENV"
+        echo "CMAKE_PREFIX_PATH=$GITHUB_WORKSPACE\vcpkg\installed\x64-windows-release" >> "$GITHUB_ENV"
+  
+
     - name: Build and Tests
       uses: tesseract-robotics/colcon-action@v1
       with:
