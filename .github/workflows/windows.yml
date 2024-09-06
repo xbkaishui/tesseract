@@ -42,12 +42,6 @@ jobs:
       with:
         arch: x64
 
-    - name: update environment
-      shell: bash
-      run: |
-        echo "PATH=${{ env.PATH }};$GITHUB_WORKSPACE\vcpkg\installed\x64-windows-release\bin" >> "$GITHUB_ENV"
-        echo "CMAKE_PREFIX_PATH=$GITHUB_WORKSPACE\vcpkg\installed\x64-windows-release" >> "$GITHUB_ENV"
-
     - name: Build and Tests
       uses: tesseract-robotics/colcon-action@v1
       with:
@@ -57,14 +51,17 @@ jobs:
         target-path: target_ws/src
         target-args: --cmake-args -G "Ninja" -DVCPKG_TARGET_TRIPLET=x64-windows-release -DCMAKE_BUILD_TYPE=Release -DTESSERACT_ENABLE_TESTING=OFF
 
-    - name: Upload build directory
-      uses: actions/upload-artifact@v3
-      with:
-        name: build-artifacts  # Artifacts的名称
-        path: $GITHUB_WORKSPACE/target_ws/build  # 上传整个build目录
+    - name: List .so files in install directory
+      run: |
+        echo "Listing .so files in install directory:"
+        dir "D:\a\tesseract\tesseract\target_ws\install\*.so" /s
 
-    - name: Upload install directory
+    - name: Zip install directory
+      run: |
+        powershell Compress-Archive -Path "D:\a\tesseract\tesseract\target_ws\install\*" -DestinationPath "D:\a\tesseract\tesseract\target_ws\install.zip"
+
+    - name: Upload compressed install directory
       uses: actions/upload-artifact@v3
       with:
-        name: install-artifacts  # Artifacts的名称
-        path: $GITHUB_WORKSPACE/target_ws/install  # 上传整个install目录
+        name: install-zip-artifacts  # 压缩后的Artifacts名称
+        path: D:\a\tesseract\tesseract\target_ws\install.zip  # 上传压缩文件
