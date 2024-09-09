@@ -39,7 +39,7 @@ TESSERACT_COMMON_IGNORE_WARNINGS_POP
 #include <tesseract_scene_graph/kdl_parser.h>
 #include <tesseract_kinematics/core/utils.h>
 #include <tesseract_kinematics/core/types.h>
-
+#include <iostream>
 namespace tesseract_kinematics
 {
 /**
@@ -128,5 +128,7 @@ bool parseSceneGraph(KDLChainData& results,
                      const tesseract_scene_graph::SceneGraph& scene_graph,
                      const std::string& base_name,
                      const std::string& tip_name);
+
+double getMaxTimeFromEnv(const std::string& env_var_name, double default_value);                  
 }  // namespace tesseract_kinematics
 #endif  // TESSERACT_KINEMATICS_KDL_UTILS_H

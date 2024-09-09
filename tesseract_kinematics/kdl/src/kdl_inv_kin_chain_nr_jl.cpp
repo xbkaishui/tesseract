@@ -160,6 +160,8 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
     return true;  // 没有发现重复
   };
 
+  double KDL_IK_max_time = getMaxTimeFromEnv("KDL_IK_max_time", 10.0);
+
   do
   {
     fk_solver_->JntToCart(q_out, f);
@@ -245,7 +247,7 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
 
     q_out = q_curr;
     auto timediff = Clock::now() - start_time;
-    time_left = maxtime - std::chrono::duration<double>(timediff).count();
+    time_left = KDL_IK_max_time - std::chrono::duration<double>(timediff).count();
   } while (time_left > 0);
 
   printFrame(p_in);
