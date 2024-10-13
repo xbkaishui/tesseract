@@ -147,12 +147,12 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
   auto q_max =  kdl_data_.q_max;
 
   IKSolutions solutions;
-
+  double sol_max_diff = getMaxTimeFromEnv("sol_max_diff", 0.01);
   // 定义一个用于检查解是否重复的lambda函数
   auto isSolutionUnique = [&](const Eigen::VectorXd& sol) {
     for (const auto& existing_sol : solutions)
     {
-      if ((existing_sol - sol).norm() < 1e-6)  // 假设阈值为1e-6
+      if ((existing_sol - sol).norm() < sol_max_diff)  // 假设阈值为1e-6
       {
         return false;  // 发现重复
       }
@@ -160,7 +160,7 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
     return true;  // 没有发现重复
   };
 
-  double KDL_IK_max_time = getMaxTimeFromEnv("KDL_IK_max_time", 10.0);
+  double KDL_IK_max_time = getMaxTimeFromEnv("KDL_IK_max_time", 0.1);
 
   do
   {
