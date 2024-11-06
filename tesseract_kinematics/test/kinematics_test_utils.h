@@ -47,6 +47,7 @@ TESSERACT_COMMON_IGNORE_WARNINGS_POP
 #include <tesseract_urdf/urdf_parser.h>
 #include <tesseract_common/utils.h>
 #include <tesseract_support/tesseract_support_resource_locator.h>
+#include <chrono>
 
 namespace tesseract_kinematics::test_suite
 {
@@ -481,7 +482,11 @@ inline void runInvKinTest(const tesseract_kinematics::KinematicGroup& kin_group,
   // Test Inverse kinematics
   ///////////////////////////
   KinGroupIKInputs inputs{ KinGroupIKInput(target_pose, working_frame, tip_link_name) };
+  auto start = std::chrono::high_resolution_clock::now();
   IKSolutions solutions = kin_group.calcInvKin(inputs, seed);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration = end - start;
+  std::cout << "run calcInvKin cost: " << duration.count() << " ms" << std::endl;
   EXPECT_TRUE(!solutions.empty());
 
   for (const auto& sol : solutions)
@@ -1076,6 +1081,77 @@ inline void runInvKinIIWATest(const tesseract_kinematics::KinematicsPluginFactor
     EXPECT_TRUE(inv_kin == nullptr);
   }
 }
+
+inline tesseract_scene_graph::SceneGraph::UPtr getSceneGraphJakaA12()
+{
+  std::cout << "TESSERACT_SUPPORT_DIR: " << TESSERACT_SUPPORT_DIR << std::endl;
+  std::string path = std::string(TESSERACT_SUPPORT_DIR) + "/urdf/a12.urdf";
+  tesseract_common::TesseractSupportResourceLocator locator;
+  return tesseract_urdf::parseURDFFile(path, locator);
+}
+
+
+inline void runInvKinJakaTest(const tesseract_kinematics::KinematicsPluginFactory& factory,
+                              const std::string& inv_factory_name,
+                              const std::string& fwd_factory_name)
+{
+    tesseract_scene_graph::SceneGraph::Ptr scene_graph = getSceneGraphJakaA12();
+    std::string manip_name = "manipulator";
+    std::string base_link_name = "base_link";
+    std::string tip_link_name = "J6";
+
+    
+    tesseract_scene_graph::KDLStateSolver state_solver(*scene_graph);
+    tesseract_scene_graph::SceneState scene_state = state_solver.getState();
+
+    tesseract_common::PluginInfo fwd_plugin_info;
+    fwd_plugin_info.class_name = fwd_factory_name;
+    fwd_plugin_info.config["base_link"] = base_link_name;
+    fwd_plugin_info.config["tip_link"] = tip_link_name;
+
+    tesseract_common::PluginInfo inv_plugin_info;
+    inv_plugin_info.class_name = inv_factory_name;
+    inv_plugin_info.config = fwd_plugin_info.config;
+
+    // Eigen::Isometry3d pose = Eigen::Isometry3d::Identity() * Eigen::Translation3d(-0.76187, -0.234016, 0.56384) *  
+    // Eigen::Quaterniond( 0.1739437984243746, -0.002122672511369787, 0.9847532216476158, 0.0003764382437401754).normalized();
+
+// quaternion：x: -0.0467633 y: 0.998369 z: 0.00153228 w: 0.0327132
+// Translation vector: [-0.737592, -0.146713, 0.682678]
+    Eigen::Isometry3d pose = Eigen::Isometry3d::Identity() * Eigen::Translation3d(-0.737592, -0.146713, 0.682678) *  
+    Eigen::Quaterniond(0.0327132, -0.0467633, 0.998369, 0.00153228).normalized();
+  
+    std::cout << "target post: " << pose.matrix() << std::endl; 
+    Eigen::VectorXd seed;
+    seed.resize(6);
+    seed(0) = 0;
+    seed(1) = 0;
+    seed(2) = 0;
+    seed(3) = 0;
+    seed(4) = 0;
+    seed(5) = 0;
+
+    {  // Check create method using base_link and tool0
+      auto fwd_kin = factory.createFwdKin(fwd_factory_name, fwd_plugin_info, *scene_graph, scene_state);
+      EXPECT_TRUE(fwd_kin != nullptr);
+    
+
+      auto inv_kin = factory.createInvKin(inv_factory_name, inv_plugin_info, *scene_graph, scene_state);
+      EXPECT_TRUE(inv_kin != nullptr);
+      //    EXPECT_EQ(inv_kin->getSolverName(), inv_solver_name);
+      EXPECT_EQ(inv_kin->numJoints(), 6);
+      EXPECT_EQ(inv_kin->getBaseLinkName(), base_link_name);
+      EXPECT_EQ(inv_kin->getWorkingFrame(), base_link_name);
+      EXPECT_EQ(inv_kin->getTipLinkNames().size(), 1);
+      EXPECT_EQ(inv_kin->getTipLinkNames()[0], tip_link_name);
+
+      for(int i =0; i < 200; i++) {
+        runInvKinTest(*inv_kin, *fwd_kin, pose, tip_link_name, seed);
+      }
+    }
+ 
+}
+
 inline tesseract_scene_graph::SceneGraph::UPtr getSceneGraphAuboI5()
 {
   std::cout << "TESSERACT_SUPPORT_DIR: " << TESSERACT_SUPPORT_DIR << std::endl;
@@ -1083,6 +1159,8 @@ inline tesseract_scene_graph::SceneGraph::UPtr getSceneGraphAuboI5()
   tesseract_common::TesseractSupportResourceLocator locator;
   return tesseract_urdf::parseURDFFile(path, locator);
 }
+
+
 inline void runInvKinAuboTest(const tesseract_kinematics::KinematicsPluginFactory& factory,
                               const std::string& inv_factory_name,
                               const std::string& fwd_factory_name)
@@ -1158,5 +1236,6 @@ inline void runInvKinAuboTest(const tesseract_kinematics::KinematicsPluginFactor
   }
  
 }
+
 }  // namespace tesseract_kinematics::test_suite
 #endif  // TESSERACT_KINEMATICS_KIN_TEST_SUITE_H

@@ -46,15 +46,26 @@ using namespace tesseract_kinematics::test_suite;
 //   runInvKinIIWATest(factory, "KDLInvKinChainNR_JLFactory", "KDLFwdKinChainFactory");
 // }
 
-TEST(TesseractKinematicsUnit, KDLKinChainNR_JL_AuboInverseKinematicUnit)  // NOLINT
+// TEST(TesseractKinematicsUnit, KDLKinChainNR_JL_AuboInverseKinematicUnit)  // NOLINT
+// {
+//   auto scene_graph = getSceneGraphAuboI5();
+
+//   tesseract_kinematics::KDLInvKinChainNR_JL::Config config;
+//   tesseract_kinematics::KDLInvKinChainNR_JL derived_kin(*scene_graph, "base_link", "wrist3_Link", config);
+
+//   tesseract_kinematics::KinematicsPluginFactory factory;
+//   runInvKinAuboTest(factory, "KDLInvKinChainNR_JLFactory", "KDLFwdKinChainFactory");
+// }
+
+TEST(TesseractKinematicsUnit, KDLKinChainNR_JL_JakaInverseKinematicUnit)  // NOLINT
 {
-  auto scene_graph = getSceneGraphAuboI5();
+  auto scene_graph = getSceneGraphJakaA12();
 
   tesseract_kinematics::KDLInvKinChainNR_JL::Config config;
-  tesseract_kinematics::KDLInvKinChainNR_JL derived_kin(*scene_graph, "base_link", "wrist3_Link", config);
+  tesseract_kinematics::KDLInvKinChainNR_JL derived_kin(*scene_graph, "base_link", "J6", config);
 
   tesseract_kinematics::KinematicsPluginFactory factory;
-  runInvKinAuboTest(factory, "KDLInvKinChainNR_JLFactory", "KDLFwdKinChainFactory");
+  runInvKinJakaTest(factory, "KDLInvKinChainNR_JLFactory", "KDLFwdKinChainFactory");
 }
 
 int main(int argc, char** argv)
