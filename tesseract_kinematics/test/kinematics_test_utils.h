@@ -451,7 +451,13 @@ inline void runInvKinTest(const tesseract_kinematics::InverseKinematics& inv_kin
   ///////////////////////////
   EXPECT_TRUE(inv_kin.getBaseLinkName() == fwd_kin.getBaseLinkName());  // This only works if they are equal
   tesseract_common::TransformMap input{ std::make_pair(tip_link_name, target_pose) };
+   
+  auto start = std::chrono::high_resolution_clock::now();
   IKSolutions solutions = inv_kin.calcInvKin(input, seed);
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> duration = end - start;
+  std::cout << "run calcInvKin cost: " << duration.count() << " ms" << std::endl;
+
   EXPECT_TRUE(!solutions.empty());
 
   for (const auto& sol : solutions)
