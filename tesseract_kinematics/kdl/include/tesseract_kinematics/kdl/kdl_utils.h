@@ -128,7 +128,6 @@ bool parseSceneGraph(KDLChainData& results,
                      const tesseract_scene_graph::SceneGraph& scene_graph,
                      const std::string& base_name,
                      const std::string& tip_name);
-
-double getMaxTimeFromEnv(const std::string& env_var_name, double default_value);                  
+                
 }  // namespace tesseract_kinematics
 #endif  // TESSERACT_KINEMATICS_KDL_UTILS_H

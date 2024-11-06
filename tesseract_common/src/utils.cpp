@@ -470,4 +470,23 @@ std::vector<std::string> getAllowedCollisions(const std::vector<std::string>& li
   return results;
 }
 
+double getMaxTimeFromEnv(const std::string& env_var_name, double default_value)
+{
+    const char* env_value = std::getenv(env_var_name.c_str());  // 获取环境变量值
+    if (env_value != nullptr)
+    {
+        double env_time = std::atof(env_value);  // 转换为 double 类型
+        // 检查值是否大于0并小于100
+        if (env_time > 0 && env_time < 100)
+        {
+            std::cout << "Using value from environment variable '" << env_var_name << "': " << env_time << std::endl;
+            return env_time;
+        }
+    }
+    
+    // 如果环境变量不存在或不符合要求，使用默认值
+    std::cout << "Using default value for '" << env_var_name << "': " << default_value << std::endl;
+    return default_value;
+}
+
 }  // namespace tesseract_common

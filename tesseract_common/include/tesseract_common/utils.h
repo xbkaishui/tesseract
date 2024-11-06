@@ -538,5 +538,6 @@ std::vector<std::string> getAllowedCollisions(const std::vector<std::string>& li
                                               const AllowedCollisionEntries& acm_entries,
                                               bool remove_duplicates = true);
 
+double getMaxTimeFromEnv(const std::string& env_var_name, double default_value);  
 }  // namespace tesseract_common
 #endif  // TESSERACT_COMMON_UTILS_H

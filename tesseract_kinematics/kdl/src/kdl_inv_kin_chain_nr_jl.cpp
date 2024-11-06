@@ -24,6 +24,7 @@
  * limitations under the License.
  */
 #include <tesseract_common/macros.h>
+#include <tesseract_common/utils.h>
 TESSERACT_COMMON_IGNORE_WARNINGS_PUSH
 #include <console_bridge/console.h>
 #include <tesseract_scene_graph/graph.h>
@@ -147,7 +148,7 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
   auto q_max =  kdl_data_.q_max;
 
   IKSolutions solutions;
-  double sol_max_diff = getMaxTimeFromEnv("sol_max_diff", 0.01);
+  double sol_max_diff = tesseract_common::getMaxTimeFromEnv("sol_max_diff", 0.01);
   // 定义一个用于检查解是否重复的lambda函数
   auto isSolutionUnique = [&](const Eigen::VectorXd& sol) {
     for (const auto& existing_sol : solutions)
@@ -160,7 +161,7 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
     return true;  // 没有发现重复
   };
 
-  double KDL_IK_max_time = getMaxTimeFromEnv("KDL_IK_max_time", 0.1);
+  double KDL_IK_max_time = tesseract_common::getMaxTimeFromEnv("KDL_IK_max_time", 0.1);
 
   do
   {
@@ -255,6 +256,10 @@ IKSolutions KDLInvKinChainNR_JL::calcInvKinHelper(const Eigen::Isometry3d& pose,
   std::cout << "Total number of solutions found: " << solutions.size() << std::endl;
 
   std::cout << "Total number of runs: " << run_cnt << std::endl;
+  for (const auto& sol : solutions)
+  {
+    std::cout << "found one solution:\t" << sol.transpose() << std::endl;
+  }
   return solutions;  // 返回去重后的解
 }
 
